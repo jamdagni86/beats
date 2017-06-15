@@ -18,10 +18,16 @@ import (
 	"github.com/elastic/beats/libbeat/outputs/mode"
 	"github.com/elastic/beats/libbeat/outputs/outil"
 	"github.com/elastic/beats/libbeat/outputs/transport"
+
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/aws/signer/v4"
 )
 
 type Client struct {
 	Connection
+
+	signer *v4.Signer
+
 	tlsConfig *transport.TLSConfig
 
 	index    outil.Selector
@@ -51,6 +57,7 @@ type ClientSettings struct {
 	Pipeline           *outil.Selector
 	Timeout            time.Duration
 	CompressionLevel   int
+	AWSRegion          string
 }
 
 type connectCallback func(client *Client) error
@@ -66,6 +73,9 @@ type Connection struct {
 
 	encoder bodyEncoder
 	version string
+
+	signer    *v4.Signer
+	awsRegion string
 }
 
 // Metrics that can retrieved through the expvar web interface.
@@ -145,6 +155,13 @@ func NewClient(
 	dialer = transport.StatsDialer(dialer, iostats)
 	tlsDialer = transport.StatsDialer(tlsDialer, iostats)
 
+	sess, err := session.NewSession()
+	if err != nil {
+		logp.Err("Error while creating an AWS session: %s", err)
+		return nil, nil
+	}
+
+	signer := v4.NewSigner(sess.Config.Credentials)
 	params := s.Parameters
 	bulkRequ, err := newBulkRequest(s.URL, "", "", params, nil)
 	if err != nil {
@@ -176,7 +193,9 @@ func NewClient(
 				},
 				Timeout: s.Timeout,
 			},
-			encoder: encoder,
+			encoder:   encoder,
+			signer:    signer,
+			awsRegion: s.AWSRegion,
 		},
 		tlsConfig: s.TLS,
 		index:     s.Index,
@@ -205,7 +224,6 @@ func (client *Client) Clone() *Client {
 	// client's close is for example generated for topology-map support. With params
 	// most likely containing the ingest node pipeline and default callback trying to
 	// create install a template, we don't want these to be included in the clone.
-
 	c, _ := NewClient(
 		ClientSettings{
 			URL:              client.URL,
@@ -717,6 +735,9 @@ func (conn *Connection) execHTTPRequest(req *http.Request) (int, []byte, error) 
 		req.Header.Add(name, value)
 	}
 
+	payload := bytes.NewReader(replaceBody(req))
+	conn.signer.Sign(req, payload, "es", conn.awsRegion, time.Now())
+
 	resp, err := conn.http.Do(req)
 	if err != nil {
 		return 0, nil, err
@@ -745,4 +766,13 @@ func closing(c io.Closer) {
 	if err != nil {
 		logp.Warn("Close failed with: %v", err)
 	}
+}
+
+func replaceBody(req *http.Request) []byte {
+	if req.Body == nil {
+		return []byte{}
+	}
+	payload, _ := ioutil.ReadAll(req.Body)
+	req.Body = ioutil.NopCloser(bytes.NewReader(payload))
+	return payload
 }

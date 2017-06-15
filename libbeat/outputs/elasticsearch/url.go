@@ -29,7 +29,7 @@ func getURL(defaultScheme string, defaultPath string, rawURL string) (string, er
 
 	scheme := addr.Scheme
 	host := addr.Host
-	port := "9200"
+	port := ""
 
 	if host == "" {
 		host = "localhost"
@@ -53,7 +53,11 @@ func getURL(defaultScheme string, defaultPath string, rawURL string) (string, er
 
 	// reconstruct url
 	addr.Scheme = scheme
-	addr.Host = host + ":" + port
+	addr.Host = host
+	if port != "" {
+		addr.Host = addr.Host + ":" + port
+	}
+
 	return addr.String(), nil
 }
 
