@@ -21,6 +21,7 @@ type elasticsearchConfig struct {
 	Timeout          time.Duration      `config:"timeout"`
 	SaveTopology     bool               `config:"save_topology"`
 	Template         Template           `config:"template"`
+	AWSRegion        string             `config:"aws_region"`
 }
 
 type Template struct {

@@ -86,7 +86,7 @@ output.elasticsearch:
   #protocol: "https"
   #username: "elastic"
   #password: "changeme"
-
+  #aws_region: "changeme"
 #----------------------------- Logstash output --------------------------------
 #output.logstash:
   # The Logstash hosts

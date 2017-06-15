@@ -98,7 +98,6 @@ func NewConnectedClient(cfg *common.Config) (*Client, error) {
 // template) .If multiple hosts are defined in the configuration, a client is returned
 // for each of them.
 func NewElasticsearchClients(cfg *common.Config) ([]Client, error) {
-
 	hosts, err := modeutil.ReadHostList(cfg)
 	if err != nil {
 		return nil, err
@@ -147,6 +146,7 @@ func NewElasticsearchClients(cfg *common.Config) ([]Client, error) {
 			Headers:          config.Headers,
 			Timeout:          config.Timeout,
 			CompressionLevel: config.CompressionLevel,
+			AWSRegion:        config.AWSRegion,
 		}, nil)
 		if err != nil {
 			return clients, err
@@ -372,6 +372,7 @@ func makeClientFactory(
 			Headers:          config.Headers,
 			Timeout:          config.Timeout,
 			CompressionLevel: config.CompressionLevel,
+			AWSRegion:        config.AWSRegion,
 		}, onConnected)
 	}
 }

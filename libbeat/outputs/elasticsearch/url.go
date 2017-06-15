@@ -22,7 +22,7 @@ func getURL(defaultScheme string, defaultPath string, rawURL string) (string, er
 
 	scheme := addr.Scheme
 	host := addr.Host
-	port := "9200"
+	port := ""
 
 	// sanitize parse errors if url does not contain scheme
 	// if parse url looks funny, prepend schema and try again:
@@ -62,7 +62,11 @@ func getURL(defaultScheme string, defaultPath string, rawURL string) (string, er
 
 	// reconstruct url
 	addr.Scheme = scheme
-	addr.Host = host + ":" + port
+	addr.Host = host
+	if port != "" {
+		addr.Host = addr.Host + ":" + port
+	}
+
 	return addr.String(), nil
 }
 
