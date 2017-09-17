@@ -18,6 +18,7 @@ import (
 	"github.com/elastic/beats/libbeat/api"
 	"github.com/elastic/beats/libbeat/beat"
 	"github.com/elastic/beats/libbeat/cfgfile"
+	"github.com/elastic/beats/libbeat/cloudid"
 	"github.com/elastic/beats/libbeat/common"
 	"github.com/elastic/beats/libbeat/common/cfgwarn"
 	"github.com/elastic/beats/libbeat/common/file"
@@ -389,6 +390,11 @@ func (b *Beat) configure() error {
 		return fmt.Errorf("error loading config file: %v", err)
 	}
 
+	err = cloudid.OverwriteSettings(cfg)
+	if err != nil {
+		return err
+	}
+
 	b.RawConfig = cfg
 	err = cfg.Unpack(&b.Config)
 	if err != nil {
@@ -444,7 +450,7 @@ func (b *Beat) loadMeta() error {
 	}
 
 	metaPath := paths.Resolve(paths.Data, "meta.json")
-	logp.Info("Beat metadata path: %v", metaPath)
+	logp.Debug("beat", "Beat metadata path: %v", metaPath)
 
 	f, err := openRegular(metaPath)
 	if err != nil && !os.IsNotExist(err) {
