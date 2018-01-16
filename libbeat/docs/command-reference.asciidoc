@@ -33,12 +33,12 @@ for controlling global behaviors.
 
 ifeval::["{beatname_lc}"!="winlogbeat"]
 
-[NOTE]
+[TIP]
 =========================
-You may need to use `sudo` to run the following commands if you've:
+Use `sudo` to run the following commands if:
 
-* changed ownership of the config file to `root`
-* enabled the Beat to capture data that requires `root` access
+* the config file is owned by `root`, or
+* {beatname_uc} is configured to capture data that requires `root` access
 
 =========================
 
@@ -96,7 +96,7 @@ command exports the configuration that's defined in the specified file.
 [[template-subcommand]]
 *`template`*::
 Exports the index template to stdout. You can specify the `--es.version` and
-`--index` flags to futher define what gets exported.
+`--index` flags to further define what gets exported.
 
 *FLAGS*
 

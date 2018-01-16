@@ -93,6 +93,11 @@ packetbeat.protocols:
   # the NFS protocol by commenting out the list of ports.
   ports: [2049]
 
+- type: tls
+  # Configure the ports where to listen for TLS traffic. You can disable
+  # the TLS protocol by commenting out the list of ports.
+  ports: [443]
+
 #==================== Elasticsearch template setting ==========================
 
 setup.template.settings:
@@ -155,8 +160,7 @@ setup.kibana:
 
 #================================ Outputs =====================================
 
-# Configure what outputs to use when sending the data collected by the beat.
-# Multiple outputs may be used.
+# Configure what output to use when sending the data collected by the beat.
 
 #-------------------------- Elasticsearch output ------------------------------
 output.elasticsearch:
@@ -186,7 +190,7 @@ output.elasticsearch:
 #================================ Logging =====================================
 
 # Sets log level. The default log level is info.
-# Available log levels are: critical, error, warning, info, debug
+# Available log levels are: error, warning, info, debug
 #logging.level: debug
 
 # At debug level, you can selectively enable logging only for some components.

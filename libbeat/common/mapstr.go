@@ -3,9 +3,12 @@ package common
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // Event metadata constants. These keys are used within libbeat to identify
@@ -155,6 +158,29 @@ func (m MapStr) String() string {
 	return string(bytes)
 }
 
+// MarshalLogObject implements the zapcore.ObjectMarshaler interface and allows
+// for more efficient marshaling of MapStr in structured logging.
+func (m MapStr) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+	if len(m) == 0 {
+		return nil
+	}
+
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		v := m[k]
+		if inner, ok := tryToMapStr(v); ok {
+			enc.AddObject(k, inner)
+			continue
+		}
+		zap.Any(k, v).AddTo(enc)
+	}
+	return nil
+}
+
 // Flatten flattens the given MapStr and returns a flat MapStr.
 //
 // Example:
@@ -247,19 +273,23 @@ func AddTags(ms MapStr, tags []string) error {
 	if ms == nil || len(tags) == 0 {
 		return nil
 	}
-
-	tagsIfc, ok := ms[TagsKey]
-	if !ok {
+	eventTags, exists := ms[TagsKey]
+	if !exists {
 		ms[TagsKey] = tags
 		return nil
 	}
 
-	existingTags, ok := tagsIfc.([]string)
-	if !ok {
-		return errors.Errorf("expected string array by type is %T", tagsIfc)
+	switch arr := eventTags.(type) {
+	case []string:
+		ms[TagsKey] = append(arr, tags...)
+	case []interface{}:
+		for _, tag := range tags {
+			arr = append(arr, tag)
+		}
+		ms[TagsKey] = arr
+	default:
+		return errors.Errorf("expected string array by type is %T", eventTags)
 	}
-
-	ms[TagsKey] = append(existingTags, tags...)
 	return nil
 }
 

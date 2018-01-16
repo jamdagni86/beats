@@ -15,6 +15,8 @@
 *.generated.yml
 coverage.out
 .python-version
+beat.db
+*.keystore
 
 # Editor swap files
 *.swp

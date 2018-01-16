@@ -58,7 +58,7 @@ func makeReporter(beat beat.Info, cfg *common.Config) (report.Reporter, error) {
 		return nil, err
 	}
 
-	// check endpoint availablity on startup only every 30 seconds
+	// check endpoint availability on startup only every 30 seconds
 	checkRetry := 30 * time.Second
 	windowSize := config.BulkMaxSize - 1
 	if windowSize <= 0 {
@@ -78,10 +78,10 @@ func makeReporter(beat beat.Info, cfg *common.Config) (report.Reporter, error) {
 	}
 
 	params := map[string]string{}
-	for k, v := range config.Params {
+	for k, v := range defaultParams {
 		params[k] = v
 	}
-	for k, v := range defaultParams {
+	for k, v := range config.Params {
 		params[k] = v
 	}
 	params["interval"] = config.Period.String()

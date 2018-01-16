@@ -15,9 +15,15 @@ REVIEWDOG_REPO=github.com/haya14busa/reviewdog/cmd/reviewdog
 
 # Runs complete testsuites (unit, system, integration) for all beats with coverage and race detection.
 # Also it builds the docs and the generators
+
 .PHONY: testsuite
 testsuite:
 	@$(foreach var,$(PROJECTS),$(MAKE) -C $(var) testsuite || exit 1;)
+
+.PHONY: setup-commit-hook
+setup-commit-hook:
+	@cp script/pre_commit.sh .git/hooks/pre-commit
+	@chmod 751 .git/hooks/pre-commit
 
 stop-environments:
 	@$(foreach var,$(PROJECTS_ENV),$(MAKE) -C $(var) stop-environment || exit 0;)
@@ -32,6 +38,11 @@ test:
 unit:
 	@$(foreach var,$(PROJECTS),$(MAKE) -C $(var) unit || exit 1;)
 
+# Crosscompile all beats.
+.PHONY: crosscompile
+crosscompile:
+	@$(foreach var,filebeat winlogbeat metricbeat heartbeat auditbeat,$(MAKE) -C $(var) crosscompile || exit 1;)
+
 .PHONY: coverage-report
 coverage-report:
 	@mkdir -p $(COVERAGE_DIR)
@@ -44,6 +55,7 @@ coverage-report:
 .PHONY: update
 update: notice
 	@$(foreach var,$(PROJECTS),$(MAKE) -C $(var) update || exit 1;)
+	@$(MAKE) -C deploy/kubernetes all
 
 .PHONY: clean
 clean:
@@ -72,7 +84,8 @@ check: python-env
 .PHONY: misspell
 misspell:
 	go get github.com/client9/misspell
-	$(FIND) -name '*' -exec misspell -w {} \;
+	# Ignore Kibana files (.json)
+	$(FIND) -not -path "*.json" -name '*' -exec misspell -w {} \;
 
 .PHONY: fmt
 fmt: python-env
@@ -140,3 +153,8 @@ notice: python-env
 python-env:
 	@test -d $(PYTHON_ENV) || virtualenv $(VIRTUALENV_PARAMS) $(PYTHON_ENV)
 	@$(PYTHON_ENV)/bin/pip install -q --upgrade pip autopep8 six
+
+# Tests if apm works with the current code
+.PHONY: test-apm
+test-apm:
+	sh ./script/test_apm.sh

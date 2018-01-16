@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/elastic/beats/libbeat/common"
@@ -49,6 +50,7 @@ type MetricSet struct {
 	body            string
 	requestEnabled  bool
 	responseEnabled bool
+	deDotEnabled    bool
 }
 
 // New create a new instance of the MetricSet
@@ -63,11 +65,13 @@ func New(base mb.BaseMetricSet) (mb.MetricSet, error) {
 		Body            string `config:"body"`
 		RequestEnabled  bool   `config:"request.enabled"`
 		ResponseEnabled bool   `config:"response.enabled"`
+		DeDotEnabled    bool   `config:"dedot.enabled"`
 	}{
 		Method:          "GET",
 		Body:            "",
 		RequestEnabled:  false,
 		ResponseEnabled: false,
+		DeDotEnabled:    false,
 	}
 
 	if err := base.Module().UnpackConfig(&config); err != nil {
@@ -86,6 +90,7 @@ func New(base mb.BaseMetricSet) (mb.MetricSet, error) {
 		http:            http,
 		requestEnabled:  config.RequestEnabled,
 		responseEnabled: config.ResponseEnabled,
+		deDotEnabled:    config.DeDotEnabled,
 	}, nil
 }
 
@@ -100,6 +105,7 @@ func (m *MetricSet) Fetch() (common.MapStr, error) {
 	defer response.Body.Close()
 
 	var jsonBody map[string]interface{}
+	var event map[string]interface{}
 
 	body, err := ioutil.ReadAll(response.Body)
 	if err != nil {
@@ -111,7 +117,11 @@ func (m *MetricSet) Fetch() (common.MapStr, error) {
 		return nil, err
 	}
 
-	event := jsonBody
+	if m.deDotEnabled {
+		event = replaceDots(jsonBody).(map[string]interface{})
+	} else {
+		event = jsonBody
+	}
 
 	if m.requestEnabled {
 		event[mb.ModuleDataKey] = common.MapStr{
@@ -124,10 +134,12 @@ func (m *MetricSet) Fetch() (common.MapStr, error) {
 	}
 
 	if m.responseEnabled {
+		phrase := strings.TrimPrefix(response.Status, strconv.Itoa(response.StatusCode)+" ")
 		event[mb.ModuleDataKey] = common.MapStr{
 			"response": common.MapStr{
-				"status_code": response.StatusCode,
-				"headers":     m.getHeaders(response.Header),
+				"code":    response.StatusCode,
+				"phrase":  phrase,
+				"headers": m.getHeaders(response.Header),
 			},
 		}
 	}
@@ -149,4 +161,17 @@ func (m *MetricSet) getHeaders(header http.Header) map[string]string {
 		headers[k] = value
 	}
 	return headers
+}
+
+func replaceDots(data interface{}) interface{} {
+	switch data.(type) {
+	case map[string]interface{}:
+		result := map[string]interface{}{}
+		for key, value := range data.(map[string]interface{}) {
+			result[common.DeDot(key)] = replaceDots(value)
+		}
+		return result
+	default:
+		return data
+	}
 }

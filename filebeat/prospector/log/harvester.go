@@ -25,6 +25,7 @@ import (
 
 	"github.com/elastic/beats/libbeat/beat"
 	"github.com/elastic/beats/libbeat/common"
+	file_helper "github.com/elastic/beats/libbeat/common/file"
 	"github.com/elastic/beats/libbeat/logp"
 	"github.com/elastic/beats/libbeat/monitoring"
 
@@ -75,6 +76,8 @@ type Harvester struct {
 	// event/state publishing
 	forwarder    *harvester.Forwarder
 	publishState func(*util.Data) bool
+
+	onTerminate func()
 }
 
 // NewHarvester creates a new harvester
@@ -124,6 +127,8 @@ func (h *Harvester) open() error {
 		return h.openStdin()
 	case harvester.LogType:
 		return h.openFile()
+	case harvester.DockerType:
+		return h.openFile()
 	default:
 		return fmt.Errorf("Invalid harvester type: %+v", h.config)
 	}
@@ -154,9 +159,13 @@ func (h *Harvester) Setup() error {
 
 // Run start the harvester and reads files line by line and sends events to the defined output
 func (h *Harvester) Run() error {
+	// Allow for some cleanup on termination
+	if h.onTerminate != nil {
+		defer h.onTerminate()
+	}
 	// This is to make sure a harvester is not started anymore if stop was already
 	// called before the harvester was started. The waitgroup is not incremented afterwards
-	// as otherwise it could happend that between checking for the close channel and incrementing
+	// as otherwise it could happened that between checking for the close channel and incrementing
 	// the waitgroup, the harvester could be stopped.
 	h.stopWg.Add(1)
 	select {
@@ -270,8 +279,17 @@ func (h *Harvester) Run() error {
 				jsonFields = f.(common.MapStr)
 			}
 
+			data.Event = beat.Event{
+				Timestamp: message.Ts,
+			}
+
 			if h.config.JSON != nil && len(jsonFields) > 0 {
-				reader.MergeJSONFields(fields, jsonFields, &text, *h.config.JSON)
+				ts := reader.MergeJSONFields(fields, jsonFields, &text, *h.config.JSON)
+				if !ts.IsZero() {
+					// there was a `@timestamp` key in the event, so overwrite
+					// the resulting timestamp
+					data.Event.Timestamp = ts
+				}
 			} else if &text != nil {
 				if fields == nil {
 					fields = common.MapStr{}
@@ -279,10 +297,7 @@ func (h *Harvester) Run() error {
 				fields["message"] = text
 			}
 
-			data.Event = beat.Event{
-				Timestamp: message.Ts,
-				Fields:    fields,
-			}
+			data.Event.Fields = fields
 		}
 
 		// Always send event to update state, also if lines was skipped
@@ -364,7 +379,7 @@ func (h *Harvester) shouldExportLine(line string) bool {
 // is returned and the harvester is closed. The file will be picked up again the next time
 // the file system is scanned
 func (h *Harvester) openFile() error {
-	f, err := file.ReadOpen(h.state.Source)
+	f, err := file_helper.ReadOpen(h.state.Source)
 	if err != nil {
 		return fmt.Errorf("Failed opening %s: %s", h.state.Source, err)
 	}
@@ -442,7 +457,7 @@ func (h *Harvester) getState() file.State {
 	state := h.state
 
 	// refreshes the values in State with the values from the harvester itself
-	state.FileStateOS = file.GetOSState(h.state.Fileinfo)
+	state.FileStateOS = file_helper.GetOSState(h.state.Fileinfo)
 	return state
 }
 
@@ -501,6 +516,11 @@ func (h *Harvester) newLogFileReader() (reader.Reader, error) {
 	r, err = reader.NewEncode(h.log, h.encoding, h.config.BufferSize)
 	if err != nil {
 		return nil, err
+	}
+
+	if h.config.DockerJSON {
+		// Docker json-file format, add custom parsing to the pipeline
+		r = reader.NewDockerJSON(r)
 	}
 
 	if h.config.JSON != nil {

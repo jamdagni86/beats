@@ -11,7 +11,6 @@ import (
 
 	"github.com/elastic/beats/libbeat/beat"
 	"github.com/elastic/beats/libbeat/common"
-	"github.com/elastic/beats/libbeat/common/droppriv"
 	"github.com/elastic/beats/libbeat/logp"
 	"github.com/elastic/beats/libbeat/processors"
 	"github.com/elastic/beats/libbeat/service"
@@ -26,6 +25,9 @@ import (
 	"github.com/elastic/beats/packetbeat/protos/udp"
 	"github.com/elastic/beats/packetbeat/publish"
 	"github.com/elastic/beats/packetbeat/sniffer"
+
+	// Add packetbeat default processors
+	_ "github.com/elastic/beats/packetbeat/processor/add_kubernetes_metadata"
 )
 
 // Beater object. Contains all objects needed to run the beat
@@ -177,12 +179,13 @@ func (pb *packetbeat) Run(b *beat.Beat) error {
 		}
 	}()
 
-	// This needs to be after the sniffer Init but before the sniffer Run.
-	if err := droppriv.DropPrivileges(pb.config.RunOptions); err != nil {
-		return err
+	defer pb.transPub.Stop()
+
+	timeout := pb.config.ShutdownTimeout
+	if timeout > 0 {
+		defer time.Sleep(timeout)
 	}
 
-	defer pb.transPub.Stop()
 	if pb.flows != nil {
 		pb.flows.Start()
 		defer pb.flows.Stop()
@@ -208,11 +211,6 @@ func (pb *packetbeat) Run(b *beat.Beat) error {
 	default:
 	case err := <-errC:
 		return err
-	}
-
-	timeout := pb.config.ShutdownTimeout
-	if timeout > 0 {
-		time.Sleep(timeout)
 	}
 
 	return nil

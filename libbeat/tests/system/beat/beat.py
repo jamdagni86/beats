@@ -207,7 +207,10 @@ class TestCase(unittest.TestCase, ComposeMixin):
 
         kargs["beat"] = self
         output_str = template.render(**kargs)
-        with open(os.path.join(self.working_dir, output), "wb") as f:
+
+        output_path = os.path.join(self.working_dir, output)
+        with open(output_path, "wb") as f:
+            os.chmod(output_path, 0600)
             f.write(output_str.encode('utf8'))
 
     # Returns output as JSON object with flattened fields (. notation)
@@ -227,7 +230,8 @@ class TestCase(unittest.TestCase, ComposeMixin):
                     break
 
                 try:
-                    jsons.append(self.flatten_object(json.loads(line), []))
+                    jsons.append(self.flatten_object(json.loads(
+                        line, object_pairs_hook=self.json_raise_on_duplicates), []))
                 except:
                     print("Fail to load the json {}".format(line))
                     raise
@@ -249,10 +253,21 @@ class TestCase(unittest.TestCase, ComposeMixin):
                     # hit EOF
                     break
 
-                event = json.loads(line)
+                event = json.loads(line, object_pairs_hook=self.json_raise_on_duplicates)
                 del event['@metadata']
                 jsons.append(event)
         return jsons
+
+    def json_raise_on_duplicates(self, ordered_pairs):
+        """Reject duplicate keys. To be used as a custom hook in JSON unmarshaling
+           to error out in case of any duplicates in the keys."""
+        d = {}
+        for k, v in ordered_pairs:
+            if k in d:
+                raise ValueError("duplicate key: %r" % (k,))
+            else:
+                d[k] = v
+        return d
 
     def copy_files(self, files, source_dir="files/"):
         for file_ in files:
@@ -445,6 +460,10 @@ class TestCase(unittest.TestCase, ComposeMixin):
 
             for field in doc_list:
 
+                # Skip fields without name entry
+                if "name" not in field:
+                    continue
+
                 # Chain together names
                 if name != "":
                     newName = name + "." + field["name"]
@@ -529,4 +548,13 @@ class TestCase(unittest.TestCase, ComposeMixin):
         return "http://{host}:{port}".format(
             host=os.getenv("ES_HOST", "localhost"),
             port=os.getenv("ES_PORT", "9200"),
+        )
+
+    def get_kibana_url(self):
+        """
+        Returns kibana host URL
+        """
+        return "http://{host}:{port}".format(
+            host=os.getenv("KIBANA_HOST", "localhost"),
+            port=os.getenv("KIBANA_PORT", "5601"),
         )

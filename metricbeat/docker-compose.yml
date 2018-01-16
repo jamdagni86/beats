@@ -17,12 +17,14 @@ services:
       - ./module/couchbase/_meta/env
       - ./module/dropwizard/_meta/env
       - ./module/elasticsearch/_meta/env
+      - ./module/etcd/_meta/env
       - ./module/haproxy/_meta/env
       - ./module/http/_meta/env
       - ./module/jolokia/_meta/env
       - ./module/kafka/_meta/env
       - ./module/kibana/_meta/env
       - ./module/kubernetes/_meta/env
+      - ./module/logstash/_meta/env
       - ./module/memcached/_meta/env
       - ./module/mongodb/_meta/env
       - ./module/mysql/_meta/env
@@ -32,6 +34,7 @@ services:
       - ./module/prometheus/_meta/env
       - ./module/rabbitmq/_meta/env
       - ./module/redis/_meta/env
+      - ./module/uwsgi/_meta/env
       - ./module/zookeeper/_meta/env
 
   # Modules
@@ -59,6 +62,9 @@ services:
       - "http.host=0.0.0.0"
       - "xpack.security.enabled=false"
 
+  etcd:
+    build: ./module/etcd/_meta
+
   haproxy:
     build: ./module/haproxy/_meta
 
@@ -73,8 +79,6 @@ services:
 
   kibana:
     build: ./module/kibana/_meta
-    depends_on:
-      - elasticsearch
 
   kubernetes:
     build: ./module/kubernetes/_meta
@@ -93,6 +97,9 @@ services:
       dockerfile: Dockerfile.kube-state
     depends_on:
       - kubernetes
+
+  logstash:
+    build: ./module/logstash/_meta
 
   memcached:
     build: ./module/memcached/_meta
@@ -120,6 +127,14 @@ services:
 
   redis:
     build: ./module/redis/_meta
+
+  uwsgi_tcp:
+    build: ./module/uwsgi/_meta
+    command: uwsgi --http :8080 --master --processes 1 --threads 2 --stats 0.0.0.0:9191 --memory-report --wsgi-file app.py
+
+  uwsgi_http:
+    build: ./module/uwsgi/_meta
+    command: uwsgi --http :8080 --master --processes 1 --threads 2 --stats 0.0.0.0:9192 --memory-report --stats-http --wsgi-file app.py
 
   zookeeper:
     build: ./module/zookeeper/_meta

@@ -11,7 +11,6 @@ import (
 	"github.com/elastic/beats/filebeat/registrar"
 	"github.com/elastic/beats/libbeat/cfgfile"
 	"github.com/elastic/beats/libbeat/common"
-	"github.com/elastic/beats/libbeat/common/cfgwarn"
 	"github.com/elastic/beats/libbeat/logp"
 
 	_ "github.com/elastic/beats/filebeat/include"
@@ -22,6 +21,8 @@ type Crawler struct {
 	prospectorConfigs   []*common.Config
 	out                 channel.Factory
 	wg                  sync.WaitGroup
+	ProspectorsFactory  cfgfile.RunnerFactory
+	ModulesFactory      cfgfile.RunnerFactory
 	modulesReloader     *cfgfile.Reloader
 	prospectorsReloader *cfgfile.Reloader
 	once                bool
@@ -54,31 +55,27 @@ func (c *Crawler) Start(r *registrar.Registrar, configProspectors *common.Config
 		}
 	}
 
+	c.ProspectorsFactory = prospector.NewRunnerFactory(c.out, r, c.beatDone)
 	if configProspectors.Enabled() {
-		cfgwarn.Beta("Loading separate prospectors is enabled.")
-
 		c.prospectorsReloader = cfgfile.NewReloader(configProspectors)
-		runnerFactory := prospector.NewRunnerFactory(c.out, r, c.beatDone)
-		if err := c.prospectorsReloader.Check(runnerFactory); err != nil {
+		if err := c.prospectorsReloader.Check(c.ProspectorsFactory); err != nil {
 			return err
 		}
 
 		go func() {
-			c.prospectorsReloader.Run(runnerFactory)
+			c.prospectorsReloader.Run(c.ProspectorsFactory)
 		}()
 	}
 
+	c.ModulesFactory = fileset.NewFactory(c.out, r, c.beatVersion, pipelineLoaderFactory, c.beatDone)
 	if configModules.Enabled() {
-		cfgwarn.Beta("Loading separate modules is enabled.")
-
 		c.modulesReloader = cfgfile.NewReloader(configModules)
-		modulesFactory := fileset.NewFactory(c.out, r, c.beatVersion, pipelineLoaderFactory, c.beatDone)
-		if err := c.modulesReloader.Check(modulesFactory); err != nil {
+		if err := c.modulesReloader.Check(c.ModulesFactory); err != nil {
 			return err
 		}
 
 		go func() {
-			c.modulesReloader.Run(modulesFactory)
+			c.modulesReloader.Run(c.ModulesFactory)
 		}()
 	}
 
@@ -91,17 +88,17 @@ func (c *Crawler) startProspector(config *common.Config, states []file.State) er
 	if !config.Enabled() {
 		return nil
 	}
-	p, err := prospector.New(config, c.out, c.beatDone, states)
+	p, err := prospector.New(config, c.out, c.beatDone, states, nil)
 	if err != nil {
 		return fmt.Errorf("Error in initing prospector: %s", err)
 	}
 	p.Once = c.once
 
-	if _, ok := c.prospectors[p.ID()]; ok {
-		return fmt.Errorf("Prospector with same ID already exists: %v", p.ID())
+	if _, ok := c.prospectors[p.ID]; ok {
+		return fmt.Errorf("Prospector with same ID already exists: %d", p.ID)
 	}
 
-	c.prospectors[p.ID()] = p
+	c.prospectors[p.ID] = p
 
 	p.Start()
 
